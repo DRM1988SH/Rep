@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج التقارير اليومية للمسلخ (الذاكرة المحلية)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* الخط المستخدم: Cairo */
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+        /* الألوان المطلوبة: بني ذهبي رملي */
+        :root {
+            --header-footer-color: #A0522D; /* Sienna - بني رملي داكن */
+            --header-height: 60px;
+            --footer-height: 20px;
+            --sidebar-width: 250px;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f7f9fb;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        /* تصميم الدوار للتحميل */
+        .loading-spinner {
+            border-top: 4px solid #f3f3f3;
+            border-right: 4px solid #f3f3f3;
+            border-bottom: 4px solid #f3f3f3;
+            border-left: 4px solid #fff;
+            transform: translateZ(0);
+            animation: spin 1s infinite linear;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* تنسيق الأزرار المشتركة */
+        .app-button {
+            padding: 1rem 1.5rem;
+            font-size: 1.125rem;
+            font-weight: 700;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .app-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* تخطيط الصفحة الرئيسية */
+        #main-layout {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding-top: var(--header-height);
+            padding-bottom: var(--footer-height);
+        }
+        #app-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
+            background-color: var(--header-footer-color);
+            color: white;
+            z-index: 20;
+        }
+        #app-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: var(--footer-height);
+            background-color: var(--header-footer-color);
+            color: white;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.6rem;
+            padding: 0;
+            margin: 0;
+            line-height: 1;
+        }
+        #app-content {
+            flex-grow: 1;
+            display: flex;
+            background-color: #f7f9fb;
+        }
+        #sidebar {
+            width: var(--sidebar-width);
+            flex-shrink: 0;
+            padding: 1rem;
+            background-color: white;
+            border-left: 1px solid #e5e7eb;
+        }
+        #screen-container {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        /* تنسيقات الألوان الخاصة بالتقييم */
+        .color-0-5 { background-color: rgba(239, 68, 68, 0.3); } /* أحمر شفاف */
+        .color-1 { background-color: rgba(210, 180, 140, 0.5); } /* بني فاتح */
+        .color-1-5 { background-color: rgba(144, 238, 144, 0.5); } /* أخضر فاتح جداً */
+        .color-2 { background-color: rgba(152, 251, 152, 0.5); } /* أخضر فاتح */
+        .color-2-5 { background-color: rgba(0, 128, 0, 0.3); } /* أخضر */
+        .color-na { background-color: #f3f4f6; color: #6b7280; } /* غير مقيم */
+
+        /* تنسيق مدخلات الجدول - يجب أن تكون بولد وواضحة */
+        .table-input {
+            width: 100%;
+            height: 100%;
+            padding: 0.25rem;
+            font-weight: 700;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+        .table-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+        .table-input:disabled {
+            background-color: #f3f4f6;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+        .table-cell-header {
+            min-width: 50px;
+        }
+
+        /* تنسيق لمدخلات النظافة (Select) */
+        .cleaning-score-select-table {
+            width: 100%;
+            height: 100%;
+            padding: 0.25rem;
+            font-weight: 700;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        .cleaning-score-select-table:focus {
+            outline: 2px solid #3b82f6;
+        }
+        
+        /* تنسيقات خاصة للطباعة */
+        @media print {
+            /* إخفاء جميع عناصر التطبيق باستثناء حاوية الطباعة */
+            body > * { display: none !important; }
+            #print-container { 
+                display: block !important;
+                direction: rtl; /* لضمان الطباعة بالاتجاه الصحيح */
+                padding: 20px;
+                font-family: 'Cairo', sans-serif !important;
+            }
+            /* إخفاء الأزرار وأدوات التحكم في الطباعة */
+            #print-container .app-button,
+            #print-container select,
+            #print-container input[type="file"],
+            #print-container .delete-point,
+            #print-container .delete-admin,
+            #print-container .approve-day-button,
+            #print-container .new-lab-input,
+            #print-container #addLabReport,
+            #print-container .accordion-toggle,
+            #print-container .delete-lab-button,
+            #print-container .edit-lab-button { 
+                display: none !important;
+            } 
+            /* إزالة الحدود والخلفيات من المدخلات لجعلها تبدو كجزء من التقرير المطبوع */
+            #print-container input:not([type="number"]), #print-container select { 
+                border: none !important;
+                background: none !important; 
+                padding: 0 !important;
+                display: block !important;
+                width: auto !important;
+            }
+            #print-container input[type="number"] {
+                border: none !important;
+                background: none !important;
+            }
+
+            /* التأكد من طباعة الألوان للخلفيات الملونة */
+            #print-container table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            #print-container th, #print-container td { border: 1px solid #000 !important; padding: 5px; }
+            #print-container thead { 
+                background-color: #f0f0f0 !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+            .color-0-5, .color-1, .color-1-5, .color-2, .color-2-5, .color-na {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+        }
+
+        /* تنسيقات خاصة للجدول المرن */
+        .flexible-cell {
+            min-height: 40px;
+            height: auto;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            padding: 4px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        .flexible-input {
+            width: 100%;
+            min-height: 40px;
+            height: auto;
+            resize: vertical;
+            padding: 4px;
+            font-weight: 700;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+        
+        /* تنسيقات خاصة للفحوصات المخبرية */
+        .lab-date-picker {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .lab-table-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .lab-table th {
+            position: sticky;
+            top: 0;
+            background-color: #f8fafc;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen" class="fixed inset-0 bg-white flex flex-col items-center justify-center z-50 transition-opacity duration-500 opacity-100">
+        <h1 class="text-4xl font-extrabold text-gray-800 mb-6">برنامج التقارير اليومية للمسلخ</h1>
+        <img id="splash-image-display" src="" alt="صورة شاشة الترحيب" class="rounded-lg shadow-xl mb-8 w-96 h-48 object-cover">
+        <div class="loading-spinner h-10 w-10 rounded-full border-8"></div>
+        <p class="mt-4 text-gray-600">جاري تحميل النظام...</p>
+    </div>
+
+    <div id="login-screen" class="hidden fixed inset-0 bg-gray-100 flex items-center justify-center z-40">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">تسجيل الدخول</h2>
+            <div class="mb-4">
+                <label for="abattoirCode" class="block text-gray-700 font-semibold mb-2">رمز المسلخ</label>
+                <input type="text" id="abattoirCode" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-lg font-mono text-center" placeholder="أدخل رمز المسلخ">
+            </div>
+            <p id="loginMessage" class="text-red-500 text-sm mb-4 hidden">رمز المسلخ غير صحيح.</p>
+            <button id="loginButton" class="w-full p-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition duration-150 flex items-center justify-center">
+                تسجيل الدخول
+                <div id="loginLoading" class="hidden loading-spinner h-5 w-5 rounded-full border-4 mr-2"></div>
+            </button>
+        </div>
+    </div>
+
+    <div id="main-layout" class="hidden">
+        
+        <header id="app-header" class="flex flex-col justify-center items-center p-4 shadow-lg">
+            <div class="flex justify-between items-center w-full max-w-6xl mx-auto">
+                <h1 class="text-3xl font-extrabold">نظام إدارة التقارير اليومية للمسالخ</h1>
+                <div class="flex items-center space-x-4 space-x-reverse">
+                    <div class="text-sm font-semibold text-white ml-4 text-right">
+                        <p id="headerAbattoirName">مسلخ</p>
+                        <p class="text-xs text-gray-200" id="headerAbattoirCode">N/A</p>
+                    </div>
+                    <button id="logoutButton" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-150">
+                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        تسجيل خروج
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div id="app-content">
+            
+            <aside id="sidebar" class="hidden lg:block">
+                <img id="sidebar-image-display" src="" alt="صورة المسلخ الموحدة" class="w-full h-auto rounded-lg shadow-md mb-4">
+                <nav class="mt-8 space-y-4">
+                    <button data-screen="dashboard" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 font-semibold text-gray-700">لوحة التحكم</button>
+                    <button data-screen="cleaning" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700">تقييم النظافة</button>
+                    <button data-screen="temperature" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700">درجات الحرارة</button>
+                    <button data-screen="maintenance" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700">تقييم الصيانة</button>
+                    <button data-screen="laboratory" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700">الفحوصات المخبرية</button>
+                    <button data-screen="reports" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700">التقارير</button>
+                    <button id="settingsLink" data-screen="settings" class="menu-item w-full text-right p-3 rounded-lg hover:bg-gray-100 transition duration-150 text-gray-700 hidden font-bold text-blue-700">الإعدادات (مدير النظام)</button>
+                </nav>
+            </aside>
+
+            <main id="screen-container" class="relative">
+                <button id="backButton" class="absolute top-4 left-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-150 flex items-center z-10 hidden">
+                    <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    رجوع
+                </button>
+                
+                <div id="dashboard-screen" class="app-screen"></div>
+                <div id="cleaning-screen" class="app-screen hidden"></div>
+                <div id="temperature-screen" class="app-screen hidden"></div>
+                <div id="maintenance-screen" class="app-screen hidden"></div>
+                <div id="laboratory-screen" class="app-screen hidden"></div>
+                <div id="reports-screen" class="app-screen hidden"></div>
+                <div id="settings-screen" class="app-screen hidden"></div>
+
+                <div id="app-message" class="fixed top-20 right-4 p-4 rounded-lg shadow-xl text-white font-semibold z-50 hidden transition-opacity duration-300 opacity-0"></div>
+
+            </main>
+        </div>
+
+        <footer id="app-footer">
+            <p>&copy; ©2025 نظام التقارير اليومية للمسالخ. جميع الحقوق محفوظة.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        // =========================================================
+        // 1. تهيئة الحالة العامة والإعدادات الافتراضية
+        // =========================================================
+
+        const STATE_KEY = 'slaughterhouse_app_state_v8';
+
+        // Placeholder Base64 image data for defaults
+        const DEFAULT_BASE64_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgNDAwIDIwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNDMDc5MzQiLz48dGV4dCB4PSIyMDAiIHk9IjEwMCIgZm9udC1mYW1pbHk9ImNhaXJvLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmaWxsPSIjZmZmZmZmIj5QYWxhY2UgZm9yIFNwbGFzaCBJbWFnZTwvdGV4dD48L3N2Zz4=';
+        const DEFAULT_BASE64_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIj48Y2lyY2xlIGN4PSIyNSIgY3k9IjI1IiByPSIyNSIgZmlsbD0iI0EwNTIyRCIvPjx0ZXh0IHg9IjI1IiB5PSIyNSIgZm9udC1mYW1pbHk9ImNhaXJvLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmaWxsPSIjZmZmZmZmIj5BPC90ZXh0Pjwvc3ZnPg==';
+
+        const DEFAULT_STATE = {
+            isLoggedIn: false,
+            currentAbattoir: null,
+            isAdmin: false,
+            currentScreen: 'dashboard',
+            config: { 
+                splashImageUrl: DEFAULT_BASE64_IMAGE,
+                unifiedImageUrl: DEFAULT_BASE64_ICON,
+                abattoirs: [
+                    { id: '00000', name: 'مسلخ غياثي' }
+                ],
+                adminCode: '70062',
+                tempPoints: [
+                    'knife steriliser1', 'knife steriliser2', 'knife steriliser3', 'knife steriliser4', 
+                    'knife steriliser5', 'knife steriliser6', 'knife steriliser7', 'Chiller', 
+                    'Heater room', 'slaughtering hall'
+                ],
+                cleaningPoints: [
+                    'صالة الذبح والأرضيات', 'طاولة التقطيع والسكاكين', 
+                    'غرفة الكرش', 'الأدوات والمعدات'
+                ],
+                maintenancePoints: [
+                    'صيانة المقاول (إنهاء العطل)', 'عطل سابق (مقاول)', 'صيانة البلدية (متابعة)', 'عطل سابق (بلدية)'
+                ],
+                labAnimalTypes: ['ضان', 'ماعز', 'بقر', 'جمال'],
+                labAnimalGenders: ['ذكر', 'انثى'],
+                labSuspicions: ['بروسيلا', 'يرقان', 'رائحة', 'مضادات حيوية'],
+                labTests: ['بروسيلا', 'يرقان', 'رائحة', 'مضادات حيوية'],
+                labResults: ['سلبية', 'ايجابية', 'مشكوك فيها'],
+                labJudgments: ['السماح بالذبح', 'الرفض', 'الحجز لمدة 24 ساعة', 'الاعدام']
+            },
+            reports: {
+                cleaning_reports: {},
+                temperature_reports: {},
+                maintenance_reports: {},
+                laboratory_reports: {}
+            }
+        };
+
+        let state = {};
+
+        // =========================================================
+        // 2. إدارة الذاكرة المحلية (localStorage)
+        // =========================================================
+
+        function loadFromStorage() {
+            try {
+                const storedState = localStorage.getItem(STATE_KEY);
+                if (storedState) {
+                    const parsed = JSON.parse(storedState);
+                    state = {
+                        ...DEFAULT_STATE,
+                        ...parsed,
+                        config: { ...DEFAULT_STATE.config, ...parsed.config },
+                        reports: { ...DEFAULT_STATE.reports, ...parsed.reports }
+                    };
+                } else {
+                    state = DEFAULT_STATE;
+                }
+            } catch (e) {
+                console.error("Error loading state from localStorage:", e);
+                state = DEFAULT_STATE;
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STATE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error("Error saving state to localStorage:", e);
+                showMessage("فشل حفظ البيانات محليًا. الذاكرة ممتلئة أو غير متاحة.", 'error');
+            }
+        }
+
+        // =========================================================
+        // 3. إدارة واجهة المستخدم والمسارات
+        // =========================================================
+
+        const dom = {
+            splashScreen: document.getElementById('splash-screen'),
+            loginScreen: document.getElementById('login-screen'),
+            mainLayout: document.getElementById('main-layout'),
+            abattoirCodeInput: document.getElementById('abattoirCode'),
+            loginButton: document.getElementById('loginButton'),
+            loginLoading: document.getElementById('loginLoading'),
+            loginMessage: document.getElementById('loginMessage'),
+            logoutButton: document.getElementById('logoutButton'),
+            settingsLink: document.getElementById('settingsLink'),
+            sidebarImageDisplay: document.getElementById('sidebar-image-display'),
+            splashImageDisplay: document.getElementById('splash-image-display'),
+            headerAbattoirName: document.getElementById('headerAbattoirName'),
+            headerAbattoirCode: document.getElementById('headerAbattoirCode'),
+            backButton: document.getElementById('backButton'),
+            screenContainer: document.getElementById('screen-container'),
+            appMessage: document.getElementById('app-message'),
+            appHeader: document.getElementById('app-header'),
+            appFooter: document.getElementById('app-footer'),
+            sidebar: document.getElementById('sidebar'),
+        };
+
+        function showMessage(msg, type = 'success') {
+            dom.appMessage.textContent = msg;
+            dom.appMessage.classList.remove('hidden', 'opacity-0', 'bg-red-500', 'bg-green-500');
+            dom.appMessage.classList.add(type === 'success' ? 'bg-green-500' : 'bg-red-500');
+            setTimeout(() => {
+                dom.appMessage.classList.add('opacity-100');
+            }, 50);
+            setTimeout(() => {
+                dom.appMessage.classList.remove('opacity-100');
+                dom.appMessage.classList.add('opacity-0');
+                setTimeout(() => dom.appMessage.classList.add('hidden'), 300);
+            }, 3000);
+        }
+
+        const renderScreen = (screenName) => {
+            state.currentScreen = screenName;
+            document.querySelectorAll('.app-screen').forEach(screen => {
+                screen.classList.add('hidden');
+            });
+            const activeScreen = document.getElementById(`${screenName}-screen`);
+            if (activeScreen) {
+                activeScreen.classList.remove('hidden');
+                switch(screenName) {
+                    case 'dashboard': renderDashboard(); break;
+                    case 'cleaning': renderCleaningScreen(); break;
+                    case 'temperature': renderTemperatureScreen(); break;
+                    case 'maintenance': renderMaintenanceScreen(); break;
+                    case 'laboratory': renderLaboratoryScreen(); break;
+                    case 'reports': renderReportsScreen(); break;
+                    case 'settings': renderSettingsScreen(); break;
+                }
+            }
+
+            dom.backButton.classList.toggle('hidden', screenName === 'dashboard');
+        };
+
+        // =========================================================
+        // 4. وظائف المصادقة والتحويل ورفع الملفات
+        // =========================================================
+
+        function updateHeaderAbattoirInfo() {
+            if (state.currentAbattoir) {
+                dom.headerAbattoirName.textContent = state.currentAbattoir.name;
+                dom.headerAbattoirCode.textContent = state.currentAbattoir.id;
+            } else {
+                dom.headerAbattoirName.textContent = 'مسلخ';
+                dom.headerAbattoirCode.textContent = 'N/A';
+            }
+        }
+
+        function handleLogin(abattoirCode) {
+            dom.loginButton.disabled = true;
+            dom.loginLoading.classList.remove('hidden');
+            dom.loginMessage.classList.add('hidden');
+
+            // التحقق إذا كان الرمز هو رمز المدير
+            if (abattoirCode === state.config.adminCode) {
+                state.isLoggedIn = true;
+                state.isAdmin = true;
+                state.currentAbattoir = null;
+
+                dom.loginScreen.classList.add('hidden');
+                dom.mainLayout.classList.remove('hidden');
+                dom.settingsLink.classList.remove('hidden');
+                dom.sidebarImageDisplay.src = state.config.unifiedImageUrl;
+                updateHeaderAbattoirInfo();
+                
+                renderScreen('dashboard');
+                showMessage('تم تسجيل الدخول كمدير نظام.', 'success');
+            } 
+            // التحقق إذا كان الرمز هو رمز مسلخ معروف
+            else {
+                const abattoir = state.config.abattoirs.find(a => a.id === abattoirCode);
+                if (abattoir) {
+                    state.isLoggedIn = true;
+                    state.isAdmin = false;
+                    state.currentAbattoir = abattoir;
+
+                    dom.loginScreen.classList.add('hidden');
+                    dom.mainLayout.classList.remove('hidden');
+                    dom.settingsLink.classList.add('hidden');
+                    dom.sidebarImageDisplay.src = state.config.unifiedImageUrl;
+                    updateHeaderAbattoirInfo();
+                    
+                    renderScreen('dashboard');
+                    showMessage(`تم تسجيل الدخول إلى ${abattoir.name} بنجاح.`, 'success');
+                } else {
+                    dom.loginMessage.textContent = 'رمز المسلخ غير صحيح.';
+                    dom.loginMessage.classList.remove('hidden');
+                }
+            }
+
+            dom.loginButton.disabled = false;
+            dom.loginLoading.classList.add('hidden');
+            saveToStorage();
+        }
+
+        function handleLogout() {
+            state.isLoggedIn = false;
+            state.currentAbattoir = null;
+            state.isAdmin = false;
+            dom.mainLayout.classList.add('hidden');
+            dom.loginScreen.classList.remove('hidden');
+            dom.abattoirCodeInput.value = '';
+            renderScreen('login');
+            saveToStorage();
+        }
+        
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = (error) => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        async function handleImageUpload(event, configKey, imageElement) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showMessage('الرجاء اختيار ملف صورة صالح.', 'error');
+                return;
+            }
+
+            try {
+                const base64Image = await fileToBase64(file);
+                state.config[configKey] = base64Image;
+                imageElement.src = base64Image;
+                saveToStorage();
+                renderSettingsScreen();
+                showMessage('تم تحديث الصورة وحفظها بنجاح.', 'success');
+            } catch (e) {
+                console.error("Error converting file:", e);
+                showMessage('فشل في قراءة أو حفظ ملف الصورة.', 'error');
+            }
+        }
+
+        function setupAppAndLoad() {
+            loadFromStorage();
+            dom.splashImageDisplay.src = state.config.splashImageUrl;
+            dom.sidebarImageDisplay.src = state.config.unifiedImageUrl;
+            
+            dom.splashScreen.classList.add('opacity-0');
+            setTimeout(() => {
+                dom.splashScreen.classList.add('hidden');
+                if (state.isLoggedIn) {
+                    if (state.isAdmin) {
+                        dom.mainLayout.classList.remove('hidden');
+                        dom.settingsLink.classList.remove('hidden');
+                        updateHeaderAbattoirInfo();
+                        renderScreen(state.currentScreen || 'dashboard');
+                    } else if (state.currentAbattoir) {
+                        dom.mainLayout.classList.remove('hidden');
+                        dom.settingsLink.classList.add('hidden');
+                        updateHeaderAbattoirInfo();
+                        renderScreen(state.currentScreen || 'dashboard');
+                    } else {
+                        handleLogout(); 
+                    }
+                } else {
+                    renderScreen('login'); 
+                }
+            }, 500);
+        }
+
+        // =========================================================
+        // 5. الدوال المساعدة وتنسيق العناصر
+        // =========================================================
+
+        function getCleaningColorClass(score) {
+            const scoreValue = parseFloat(score);
+            if (scoreValue === 0.5) return 'color-0-5';
+            if (scoreValue === 1) return 'color-1';
+            if (scoreValue === 1.5) return 'color-1-5';
+            if (scoreValue === 2) return 'color-2';
+            if (scoreValue === 2.5) return 'color-2-5';
+            return 'color-na';
+        }
+        
+        function getCleaningLabel(score) {
+            const scoreValue = parseFloat(score);
+            if (scoreValue === 2.5) return 'ممتاز';
+            if (scoreValue === 2) return 'جيد جداً';
+            if (scoreValue === 1.5) return 'متوسط';
+            if (scoreValue === 1) return 'مقبول';
+            if (scoreValue === 0.5) return 'ضعيف';
+            return '--';
+        }
+        
+        function getDaysInMonth(year, month) {
+            return new Date(year, month, 0).getDate();
+        }
+
+        // =========================================================
+        // 6. تصدير التقرير الاحترافي
+        // =========================================================
+
+        function exportPdf(title, elementId) {
+            const reportContent = document.getElementById(elementId);
+            if (!reportContent) {
+                showMessage('لم يتم العثور على محتوى التقرير.', 'error');
+                return;
+            }
+
+            const printContainer = document.createElement('div');
+            printContainer.id = 'print-container';
+            printContainer.style.display = 'none';
+
+            const headerHtml = `
+                <div style="text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid var(--header-footer-color);">
+                    <h1 style="font-size: 28px; font-weight: 700; color: #333;">تقرير: ${title}</h1>
+                    <p style="font-size: 16px; color: #555; margin-top: 5px;">
+                        المسلخ: ${state.currentAbattoir?.name || state.config.abattoirs[0]?.name || 'N/A'} | التاريخ: ${new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                </div>
+            `;
+
+            const contentClone = reportContent.cloneNode(true);
+            contentClone.querySelectorAll('.app-button, .approve-day-button, .new-lab-input, #addLabReport, .delete-lab-button, .edit-lab-button').forEach(el => {
+                el.remove();
+            });
+
+            contentClone.querySelectorAll('input, select, textarea').forEach(input => {
+                const span = document.createElement('span');
+                span.textContent = input.value || input.textContent || '';
+                span.style.fontWeight = 'bold';
+                span.style.display = 'block';
+                span.style.minWidth = '50px';
+                input.parentNode.replaceChild(span, input);
+            });
+
+            printContainer.innerHTML = headerHtml;
+            printContainer.appendChild(contentClone);
+
+            document.body.appendChild(printContainer);
+            printContainer.style.display = 'block';
+
+            window.print();
+
+            document.body.removeChild(printContainer);
+        }
+
+        // =========================================================
+        // 7. محتوى الشاشات والـ Render 
+        // =========================================================
+        
+        // --- شاشة لوحة التحكم ---
+        function renderDashboard() {
+            const screen = document.getElementById('dashboard-screen');
+            const abattoirName = state.isAdmin ? 'مدير النظام' : (state.currentAbattoir?.name || 'مسلخ');
+            
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">لوحة التحكم</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                    <h3 class="text-xl font-semibold mb-4 text-emerald-600">مرحباً بك في ${abattoirName}</h3>
+                    <p class="text-gray-600 mb-4">يمكنك استخدام القائمة الجانبية للوصول إلى مختلف أقسام النظام.</p>
+                    ${state.isAdmin ? 
+                        '<p class="text-blue-600 font-semibold">أنت مسجل الدخول كمدير نظام. يمكنك الوصول إلى جميع الإعدادات.</p>' : 
+                        '<p class="text-green-600">يمكنك إدخال التقارير اليومية للمسلخ الخاص بك.</p>'
+                    }
+                </div>
+            `;
+        }
+
+        // --- شاشة تقييم النظافة ---
+        function renderCleaningScreen() {
+            if (!state.currentAbattoir && !state.isAdmin) {
+                document.getElementById('cleaning-screen').innerHTML = '<p class="text-2xl text-red-600 font-bold text-center mt-20">عفواً، يجب تسجيل الدخول إلى مسلخ أولاً.</p>';
+                return;
+            }
+            
+            const screen = document.getElementById('cleaning-screen');
+            const abattoir = state.currentAbattoir?.name || state.config.abattoirs[0]?.name || 'المسلخ غير محدد';
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const currentMonthYear = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">تقييم النظافة اليومي</h2>
+                <div class="flex justify-between items-center mb-6 p-4 bg-white rounded-lg shadow-md">
+                    <span class="text-lg font-semibold text-gray-700">المسلخ: ${abattoir}</span>
+                    <input type="month" id="cleaning-month-filter" value="${currentMonthYear}" class="p-2 border rounded-lg text-lg">
+                </div>
+                <div id="cleaning-report-content" class="overflow-x-auto bg-white rounded-xl shadow-lg">
+                    <table class="min-w-full border-collapse border border-gray-400 text-right text-xs">
+                        </table>
+                </div>
+                <button id="exportCleaningReport" class="mt-4 app-button bg-sky-600 text-white w-full">تصدير التقرير PDF</button>
+            `;
+            
+            const monthFilter = document.getElementById('cleaning-month-filter');
+            monthFilter.addEventListener('change', (e) => {
+                const [year, month] = e.target.value.split('-').map(Number);
+                rebuildCleaningTable(year, month);
+            });
+            document.getElementById('cleaning-report-content').addEventListener('change', handleCleaningInput);
+            document.getElementById('cleaning-report-content').addEventListener('click', handleCleaningApprove);
+            document.getElementById('exportCleaningReport').addEventListener('click', () => exportPdf('تقرير تقييم النظافة', 'cleaning-report-content'));
+
+            rebuildCleaningTable(currentYear, currentMonth);
+        }
+
+        function rebuildCleaningTable(year, month) {
+            const lastDay = getDaysInMonth(year, month);
+            const cleaningPoints = state.config.cleaningPoints;
+            const scores = [2.5, 2, 1.5, 1, 0.5];
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            if (cleaningPoints.length === 0) {
+                document.querySelector('#cleaning-report-content table').innerHTML = `
+                    <p class="p-6 text-center text-gray-500">
+                        لم يتم تعريف نقاط تقييم النظافة بعد. الرجاء إضافتها من شاشة الإعدادات.
+                    </p>
+                `;
+                return;
+            }
+
+            let tableHeader = `
+                <thead class="bg-gray-100 sticky top-0">
+                    <tr>
+                        <th class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">التاريخ</th>
+                        ${cleaningPoints.map(point => 
+                            `<th class="p-2 border border-gray-400 bg-gray-300 text-sm font-semibold table-cell-header" title="${point}">${point.substring(0, 15)}</th>`
+                        ).join('')}
+                        <th class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">اعتماد/حذف</th>
+                    </tr>
+                </thead>
+            `;
+
+            let tableRows = '';
+            for (let day = 1; day <= lastDay; day++) {
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const displayDate = String(day).padStart(2, '0');
+                
+                tableRows += `
+                    <tr data-date="${dateStr}" class="hover:bg-yellow-50">
+                        <td class="p-1 border border-gray-400 font-bold bg-gray-50 text-center">${displayDate}</td>
+                        ${cleaningPoints.map(point => `
+                            <td class="p-0 border border-gray-400 w-20 h-10">
+                                <select data-date="${dateStr}" data-point="${point}" class="cleaning-score-select-table text-sm">
+                                    <option value="" class="bg-gray-100">--</option>
+                                    ${scores.map(score => 
+                                        `<option value="${score}" class="${getCleaningColorClass(score)}">${score}</option>`
+                                    ).join('')}
+                                </select>
+                            </td>
+                        `).join('')}
+                        <td class="p-1 border border-gray-400 text-center">
+                            <button data-date="${dateStr}" class="approve-day-button bg-green-500 text-white p-1 rounded text-xs disabled:opacity-50 mr-1">اعتماد</button>
+                            <button data-date="${dateStr}" class="delete-day-button bg-red-500 text-white p-1 rounded text-xs">حذف</button>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            const tableContainer = document.querySelector('#cleaning-report-content table');
+            if (tableContainer) {
+                tableContainer.innerHTML = tableHeader + `<tbody id="cleaning-table-body">${tableRows}</tbody>`;
+                updateCleaningDataInTable(year, month);
+            }
+        }
+        
+        function updateCleaningDataInTable(year, month) {
+            const tableBody = document.getElementById('cleaning-table-body');
+            if (!tableBody) return;
+
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            tableBody.querySelectorAll('select.cleaning-score-select-table').forEach(select => {
+                const date = select.dataset.date;
+                const point = select.dataset.point;
+                const docId = `${date}_${abattoirId}`;
+                
+                const report = state.reports.cleaning_reports[docId];
+                
+                if (report && report.points[point]) {
+                    const score = report.points[point];
+                    select.value = score;
+                    select.className = `cleaning-score-select-table text-sm ${getCleaningColorClass(score)}`;
+                    if (report.approved) {
+                        select.disabled = true;
+                        select.classList.add('cursor-not-allowed');
+                    } else {
+                        select.disabled = false;
+                        select.classList.remove('cursor-not-allowed');
+                    }
+                } else {
+                    select.value = '';
+                    select.disabled = false;
+                    select.className = `cleaning-score-select-table text-sm ${getCleaningColorClass(null)}`;
+                }
+            });
+
+            tableBody.querySelectorAll('.approve-day-button').forEach(button => {
+                const date = button.dataset.date;
+                const selectsForDay = tableBody.querySelectorAll(`select.cleaning-score-select-table[data-date="${date}"]`);
+                const docId = `${date}_${abattoirId}`;
+                const report = state.reports.cleaning_reports[docId];
+                
+                let allApproved = report?.approved || false;
+                let allFilled = true;
+                
+                selectsForDay.forEach(select => {
+                    if (!select.value) {
+                        allFilled = false;
+                    }
+                });
+
+                if (allApproved) {
+                    button.textContent = 'معتمد';
+                    button.disabled = true;
+                    button.classList.add('bg-green-700');
+                    button.classList.remove('bg-green-500');
+                } else {
+                    button.textContent = 'اعتماد';
+                    button.disabled = !allFilled;
+                    button.classList.remove('bg-green-700');
+                    button.classList.add('bg-green-500');
+                }
+            });
+        }
+        
+        function handleCleaningInput(e) {
+            if (!e.target.classList.contains('cleaning-score-select-table')) return;
+
+            const select = e.target;
+            const value = select.value;
+            const date = select.dataset.date;
+            const point = select.dataset.point;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            const docId = `${date}_${abattoirId}`;
+            
+            select.className = `cleaning-score-select-table text-sm ${getCleaningColorClass(value)}`;
+
+            if (!state.reports.cleaning_reports[docId]) {
+                 state.reports.cleaning_reports[docId] = {
+                    date: date,
+                    abattoirId: abattoirId,
+                    points: {},
+                    approved: false,
+                    createdAt: new Date().toISOString()
+                };
+            }
+            
+            state.reports.cleaning_reports[docId].points[point] = parseFloat(value);
+            
+            saveToStorage();
+            
+            const [year, month] = date.split('-').map(Number);
+            updateCleaningDataInTable(year, month);
+        }
+
+        function handleCleaningApprove(e) {
+            if (e.target.classList.contains('approve-day-button')) {
+                const dateToApprove = e.target.dataset.date;
+                const abattoirId = state.currentAbattoir?.id || 'admin';
+                const docId = `${dateToApprove}_${abattoirId}`;
+                const tableBody = document.getElementById('cleaning-table-body');
+                const selects = tableBody.querySelectorAll(`select.cleaning-score-select-table[data-date="${dateToApprove}"]`);
+
+                if (selects.length === 0) return;
+
+                for (const select of selects) {
+                    if (!select.value) {
+                        showMessage('الرجاء تقييم جميع نقاط النظافة قبل الاعتماد.', 'error');
+                        return;
+                    }
+                }
+
+                if (state.reports.cleaning_reports[docId]) {
+                    state.reports.cleaning_reports[docId].approved = true;
+                } else {
+                    state.reports.cleaning_reports[docId] = {
+                        date: dateToApprove,
+                        abattoirId: abattoirId,
+                        points: {},
+                        approved: true,
+                        createdAt: new Date().toISOString()
+                    };
+                    selects.forEach(select => {
+                        state.reports.cleaning_reports[docId].points[select.dataset.point] = parseFloat(select.value);
+                    });
+                }
+
+                saveToStorage();
+                
+                const [year, month] = dateToApprove.split('-').map(Number);
+                updateCleaningDataInTable(year, month);
+                showMessage(`تم حفظ واعتماد التقييم بنجاح ليوم ${dateToApprove}. تم إغلاق الحقول.`);
+            }
+            
+            if (e.target.classList.contains('delete-day-button')) {
+                const dateToDelete = e.target.dataset.date;
+                const abattoirId = state.currentAbattoir?.id || 'admin';
+                const docId = `${dateToDelete}_${abattoirId}`;
+                
+                if (state.reports.cleaning_reports[docId]) {
+                    delete state.reports.cleaning_reports[docId];
+                    saveToStorage();
+                    
+                    const [year, month] = dateToDelete.split('-').map(Number);
+                    updateCleaningDataInTable(year, month);
+                    showMessage(`تم حذف تقييم النظافة ليوم ${dateToDelete}.`);
+                }
+            }
+        }
+        
+        // --- شاشة درجات الحرارة ---
+        function renderTemperatureScreen() {
+            if (!state.currentAbattoir && !state.isAdmin) {
+                document.getElementById('temperature-screen').innerHTML = '<p class="text-2xl text-red-600 font-bold text-center mt-20">عفواً، يجب تسجيل الدخول إلى مسلخ أولاً.</p>';
+                return;
+            }
+            
+            const screen = document.getElementById('temperature-screen');
+            const abattoir = state.currentAbattoir?.name || state.config.abattoirs[0]?.name || 'المسلخ غير محدد';
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const currentMonthYear = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">تقرير درجة الحرارة</h2>
+                <div class="flex justify-between items-center mb-6 p-4 bg-white rounded-lg shadow-md">
+                    <span class="text-lg font-semibold text-gray-700">المسلخ: ${abattoir}</span>
+                    <input type="month" id="temp-month-filter" value="${currentMonthYear}" class="p-2 border rounded-lg text-lg">
+                </div>
+                <div id="temp-report-content" class="overflow-x-auto bg-white rounded-xl shadow-lg">
+                    <table class="min-w-full border-collapse border border-gray-400 text-right text-xs">
+                        </table>
+                </div>
+                <button id="exportTempReport" class="mt-4 app-button bg-sky-600 text-white w-full">تصدير التقرير PDF</button>
+            `;
+
+            const monthFilter = document.getElementById('temp-month-filter');
+            monthFilter.addEventListener('change', (e) => {
+                const [year, month] = e.target.value.split('-').map(Number);
+                rebuildTemperatureTable(year, month);
+            });
+
+            document.getElementById('exportTempReport').addEventListener('click', () => exportPdf('تقرير درجات الحرارة', 'temp-report-content'));
+            
+            rebuildTemperatureTable(currentYear, currentMonth);
+
+            const tempReportContent = document.getElementById('temp-report-content');
+            tempReportContent.addEventListener('input', handleTemperatureInput);
+            tempReportContent.addEventListener('click', handleTemperatureApprove);
+        }
+
+        function rebuildTemperatureTable(year, month) {
+            const lastDay = getDaysInMonth(year, month);
+            const tempPoints = state.config.tempPoints;
+            const periods = [
+                { id: '7am', label: '7 ص' },
+                { id: '11am', label: '11 ص' },
+                { id: '2pm', label: '2 م' },
+                { id: '5pm', label: '5 م' }
+            ];
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            if (tempPoints.length === 0) {
+                document.querySelector('#temp-report-content table').innerHTML = `<tbody id="temperature-table-body"><tr class="p-6 text-center text-gray-500"><td colspan="100%">لم يتم تعريف نقاط قياس درجات الحرارة بعد.</td></tr></tbody>`;
+                return;
+            }
+
+            let tableHeader = `
+                <thead class="bg-gray-100 sticky top-0">
+                    <tr>
+                        <th rowspan="2" class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">التاريخ</th>
+                        ${periods.map(p => `<th colspan="${tempPoints.length}" class="p-2 border border-gray-400 bg-gray-300 text-sm font-semibold">${p.label}</th>`).join('')}
+                        <th rowspan="2" class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">اعتماد اليوم</th>
+                    </tr>
+                    <tr>
+                        ${periods.map(p => tempPoints.map(point => 
+                            `<th class="p-1 border border-gray-400 text-xs font-medium table-cell-header" title="${point}">${point.substring(0, 10)}...</th>`
+                        ).join('')).join('')}
+                    </tr>
+                </thead>
+            `;
+
+            let tableRows = '';
+            for (let day = 1; day <= lastDay; day++) {
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const displayDate = String(day).padStart(2, '0');
+                
+                tableRows += `
+                    <tr data-date="${dateStr}" class="hover:bg-yellow-50">
+                        <td class="p-1 border border-gray-400 font-bold bg-gray-50 text-center">${displayDate}</td>
+                        ${periods.map(p => tempPoints.map(point => `
+                            <td class="p-0 border border-gray-400 w-10 h-10">
+                                <input type="number" data-date="${dateStr}" data-period="${p.id}" data-point="${point}" max="99" class="table-input temperature-input text-sm" placeholder="--">
+                            </td>
+                        `).join('') ).join('')}
+                        <td class="p-1 border border-gray-400 text-center">
+                            <button data-date="${dateStr}" class="approve-day-button bg-green-500 text-white p-1 rounded text-xs disabled:opacity-50">اعتماد</button>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            const tableContainer = document.querySelector('#temp-report-content table');
+            if (tableContainer) {
+                tableContainer.innerHTML = tableHeader + `<tbody id="temperature-table-body">${tableRows}</tbody>`;
+                updateTemperatureDataInTable(year, month);
+            }
+        }
+
+        function updateTemperatureDataInTable(year, month) {
+            const tableBody = document.getElementById('temperature-table-body');
+            if (!tableBody) return;
+
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            tableBody.querySelectorAll('input.temperature-input').forEach(input => {
+                const date = input.dataset.date;
+                const period = input.dataset.period;
+                const point = input.dataset.point;
+                const docId = `${date}_${period}_${point}_${abattoirId}`;
+                
+                const data = state.reports.temperature_reports[docId];
+                
+                if (data) {
+                    input.value = data.value;
+                    if (data.approved) {
+                        input.disabled = true;
+                        input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                    } else {
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                    }
+                } else {
+                    input.value = '';
+                    input.disabled = false;
+                    input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                }
+            });
+
+            tableBody.querySelectorAll('.approve-day-button').forEach(button => {
+                const date = button.dataset.date;
+                const inputsForDay = tableBody.querySelectorAll(`input.temperature-input[data-date="${date}"]`);
+                let allApproved = true;
+                let allFilled = true;
+                
+                inputsForDay.forEach(input => {
+                    const period = input.dataset.period;
+                    const point = input.dataset.point;
+                    const docId = `${date}_${period}_${point}_${abattoirId}`;
+                    const data = state.reports.temperature_reports[docId];
+                    
+                    if (!data || !data.approved) {
+                        allApproved = false;
+                    }
+                    if (!input.value) {
+                        allFilled = false;
+                    }
+                });
+
+                if (allApproved) {
+                    button.textContent = 'معتمد';
+                    button.disabled = true;
+                    button.classList.add('bg-green-700');
+                    button.classList.remove('bg-green-500');
+                } else {
+                    button.textContent = 'اعتماد';
+                    button.disabled = !allFilled;
+                    button.classList.remove('bg-green-700');
+                    button.classList.add('bg-green-500');
+                }
+            });
+        }
+
+        function handleTemperatureInput(e) {
+            if (!e.target.classList.contains('temperature-input')) return;
+
+            const input = e.target;
+            const value = parseFloat(input.value);
+            const date = input.dataset.date;
+            const period = input.dataset.period;
+            const point = input.dataset.point;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            const docId = `${date}_${period}_${point}_${abattoirId}`;
+
+            if (isNaN(value) || value === null) {
+                if (state.reports.temperature_reports[docId]) {
+                    delete state.reports.temperature_reports[docId].value;
+                }
+                saveToStorage();
+                return;
+            }
+
+            if (value > 99) {
+                input.value = 99;
+                showMessage('الحد الأقصى المسموح به هو 99.', 'error');
+            }
+
+            state.reports.temperature_reports[docId] = {
+                date: date,
+                period: period,
+                point: point,
+                value: parseFloat(input.value),
+                approved: state.reports.temperature_reports[docId]?.approved || false,
+                abattoirId: abattoirId
+            };
+
+            saveToStorage();
+            
+            const [year, month] = date.split('-').map(Number);
+            updateTemperatureDataInTable(year, month);
+        }
+
+        function handleTemperatureApprove(e) {
+            if (!e.target.classList.contains('approve-day-button')) return;
+
+            const dateToApprove = e.target.dataset.date;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            const tableBody = document.getElementById('temperature-table-body');
+            const inputs = tableBody.querySelectorAll(`input.temperature-input[data-date="${dateToApprove}"]`);
+
+            if (inputs.length === 0) {
+                showMessage('لا توجد حقول لدرجات الحرارة في هذا اليوم لاعتمادها.', 'error');
+                return;
+            }
+
+            for (const input of inputs) {
+                if (!input.value) {
+                    showMessage('الرجاء ملء جميع حقول درجات الحرارة قبل الاعتماد.', 'error');
+                    return;
+                }
+            }
+
+            for (const input of inputs) {
+                const date = input.dataset.date;
+                const period = input.dataset.period;
+                const point = input.dataset.point;
+                const docId = `${date}_${period}_${point}_${abattoirId}`;
+                
+                state.reports.temperature_reports[docId] = {
+                    ...state.reports.temperature_reports[docId],
+                    approved: true,
+                    value: parseFloat(input.value)
+                };
+            }
+
+            saveToStorage();
+            
+            const [year, month] = dateToApprove.split('-').map(Number);
+            updateTemperatureDataInTable(year, month);
+            showMessage(`تم حفظ واعتماد التقييم بنجاح ليوم ${dateToApprove}. تم إغلاق الحقول.`);
+        }
+
+        // --- شاشة تقييم الصيانة ---
+        function renderMaintenanceScreen() {
+            if (!state.currentAbattoir && !state.isAdmin) {
+                document.getElementById('maintenance-screen').innerHTML = '<p class="text-2xl text-red-600 font-bold text-center mt-20">عفواً، يجب تسجيل الدخول إلى مسلخ أولاً.</p>';
+                return;
+            }
+            
+            const screen = document.getElementById('maintenance-screen');
+            const abattoir = state.currentAbattoir?.name || state.config.abattoirs[0]?.name || 'المسلخ غير محدد';
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const currentMonthYear = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">أعمال الصيانة اليومية</h2>
+                <div class="flex justify-between items-center mb-6 p-4 bg-white rounded-lg shadow-md">
+                    <span class="text-lg font-semibold text-gray-700">المسلخ: ${abattoir}</span>
+                    <input type="month" id="maint-month-filter" value="${currentMonthYear}" class="p-2 border rounded-lg text-lg">
+                </div>
+                <div id="maintenance-report-content" class="overflow-x-auto bg-white rounded-xl shadow-lg">
+                    <table class="min-w-full border-collapse border border-gray-400 text-sm">
+                        </table>
+                </div>
+                <button id="exportMaintenanceReport" class="mt-4 app-button bg-sky-600 text-white w-full">تصدير التقرير PDF</button>
+            `;
+            
+            const monthFilter = document.getElementById('maint-month-filter');
+            monthFilter.addEventListener('change', (e) => {
+                const [year, month] = e.target.value.split('-').map(Number);
+                rebuildMaintenanceTable(year, month);
+            });
+            document.getElementById('maintenance-report-content').addEventListener('input', handleMaintenanceInput);
+            document.getElementById('maintenance-report-content').addEventListener('click', handleMaintenanceApprove);
+            document.getElementById('exportMaintenanceReport').addEventListener('click', () => exportPdf('تقرير الصيانة', 'maintenance-report-content'));
+
+            rebuildMaintenanceTable(currentYear, currentMonth);
+        }
+        
+        function rebuildMaintenanceTable(year, month) {
+            const lastDay = getDaysInMonth(year, month);
+            const maintenancePoints = state.config.maintenancePoints;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            if (maintenancePoints.length === 0) {
+                document.querySelector('#maintenance-report-content table').innerHTML = `<tbody id="maintenance-table-body"><tr class="p-6 text-center text-gray-500"><td colspan="100%">لم يتم تعريف نقاط الصيانة بعد.</td></tr></tbody>`;
+                return;
+            }
+
+            let tableHeader = `
+                <thead class="bg-gray-100 sticky top-0">
+                    <tr>
+                        <th class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">التاريخ</th>
+                        ${maintenancePoints.map(point => 
+                            `<th class="p-2 border border-gray-400 bg-gray-300 text-sm font-semibold table-cell-header" title="${point}">${point}</th>`
+                        ).join('')}
+                        <th class="p-2 border border-gray-400 bg-gray-200 text-sm font-semibold w-24">اعتماد اليوم</th>
+                    </tr>
+                </thead>
+            `;
+
+            let tableRows = '';
+            for (let day = 1; day <= lastDay; day++) {
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const displayDate = String(day).padStart(2, '0');
+                
+                tableRows += `
+                    <tr data-date="${dateStr}" class="hover:bg-yellow-50">
+                        <td class="p-1 border border-gray-400 font-bold bg-gray-50 text-center">${displayDate}</td>
+                        ${maintenancePoints.map(point => `
+                            <td class="p-0 border border-gray-400">
+                                <textarea data-date="${dateStr}" data-point="${point}" class="flexible-input" placeholder="أدخل ملاحظات الصيانة..."></textarea>
+                            </td>
+                        `).join('')}
+                        <td class="p-1 border border-gray-400 text-center">
+                            <button data-date="${dateStr}" class="approve-day-button bg-green-500 text-white p-1 rounded text-xs disabled:opacity-50">اعتماد</button>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            const tableContainer = document.querySelector('#maintenance-report-content table');
+            if (tableContainer) {
+                tableContainer.innerHTML = tableHeader + `<tbody id="maintenance-table-body">${tableRows}</tbody>`;
+                updateMaintenanceDataInTable(year, month);
+            }
+        }
+        
+        function updateMaintenanceDataInTable(year, month) {
+            const tableBody = document.getElementById('maintenance-table-body');
+            if (!tableBody) return;
+
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+
+            tableBody.querySelectorAll('textarea.flexible-input').forEach(textarea => {
+                const date = textarea.dataset.date;
+                const point = textarea.dataset.point;
+                const docId = `${date}_${point}_${abattoirId}`;
+                
+                const data = state.reports.maintenance_reports[docId];
+                
+                if (data) {
+                    textarea.value = data.value;
+                    if (data.approved) {
+                        textarea.disabled = true;
+                        textarea.classList.add('bg-gray-100', 'cursor-not-allowed');
+                    } else {
+                        textarea.disabled = false;
+                        textarea.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                    }
+                } else {
+                    textarea.value = '';
+                    textarea.disabled = false;
+                    textarea.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                }
+                
+                autoResizeTextarea(textarea);
+            });
+
+            tableBody.querySelectorAll('.approve-day-button').forEach(button => {
+                const date = button.dataset.date;
+                const textareasForDay = tableBody.querySelectorAll(`textarea.flexible-input[data-date="${date}"]`);
+                let allApproved = true;
+                let allFilled = true;
+                
+                textareasForDay.forEach(textarea => {
+                    const point = textarea.dataset.point;
+                    const docId = `${date}_${point}_${abattoirId}`;
+                    const data = state.reports.maintenance_reports[docId];
+                    
+                    if (!data || !data.approved) {
+                        allApproved = false;
+                    }
+                    if (!textarea.value.trim()) {
+                        allFilled = false;
+                    }
+                });
+
+                if (allApproved) {
+                    button.textContent = 'معتمد';
+                    button.disabled = true;
+                    button.classList.add('bg-green-700');
+                    button.classList.remove('bg-green-500');
+                } else {
+                    button.textContent = 'اعتماد';
+                    button.disabled = !allFilled; 
+                    button.classList.remove('bg-green-700');
+                    button.classList.add('bg-green-500');
+                }
+            });
+        }
+        
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = (textarea.scrollHeight) + 'px';
+        }
+        
+        function handleMaintenanceInput(e) {
+            if (!e.target.classList.contains('flexible-input')) return;
+
+            const textarea = e.target;
+            const value = textarea.value.trim();
+            const date = textarea.dataset.date;
+            const point = textarea.dataset.point;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            const docId = `${date}_${point}_${abattoirId}`;
+
+            autoResizeTextarea(textarea);
+
+            if (!value) {
+                if (state.reports.maintenance_reports[docId]) {
+                    delete state.reports.maintenance_reports[docId].value;
+                }
+                saveToStorage();
+                return;
+            }
+
+            state.reports.maintenance_reports[docId] = {
+                date: date,
+                point: point,
+                value: value,
+                approved: state.reports.maintenance_reports[docId]?.approved || false,
+                abattoirId: abattoirId
+            };
+
+            saveToStorage();
+            
+            const [year, month] = date.split('-').map(Number);
+            updateMaintenanceDataInTable(year, month);
+        }
+
+        function handleMaintenanceApprove(e) {
+            if (!e.target.classList.contains('approve-day-button')) return;
+
+            const dateToApprove = e.target.dataset.date;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            const tableBody = document.getElementById('maintenance-table-body');
+            const textareas = tableBody.querySelectorAll(`textarea.flexible-input[data-date="${dateToApprove}"]`);
+
+            if (textareas.length === 0) return;
+
+            for (const textarea of textareas) {
+                if (!textarea.value.trim()) {
+                    showMessage('الرجاء ملء جميع حقول الصيانة قبل الاعتماد.', 'error');
+                    return;
+                }
+            }
+
+            for (const textarea of textareas) {
+                const date = textarea.dataset.date;
+                const point = textarea.dataset.point;
+                const docId = `${date}_${point}_${abattoirId}`;
+                
+                state.reports.maintenance_reports[docId] = {
+                    ...state.reports.maintenance_reports[docId],
+                    approved: true,
+                    value: textarea.value
+                };
+            }
+
+            saveToStorage();
+            
+            const [year, month] = dateToApprove.split('-').map(Number);
+            updateMaintenanceDataInTable(year, month);
+            showMessage(`تم حفظ واعتماد تقرير الصيانة بنجاح ليوم ${dateToApprove}. تم إغلاق الحقول.`);
+        }
+
+        // --- شاشة الفحوصات المخبرية المحسنة ---
+        function renderLaboratoryScreen() {
+            if (!state.currentAbattoir && !state.isAdmin) {
+                document.getElementById('laboratory-screen').innerHTML = '<p class="text-2xl text-red-600 font-bold text-center mt-20">عفواً، يجب تسجيل الدخول إلى مسلخ أولاً.</p>';
+                return;
+            }
+            
+            const screen = document.getElementById('laboratory-screen');
+            const abattoir = state.currentAbattoir?.name || state.config.abattoirs[0]?.name || 'المسلخ غير محدد';
+            const today = new Date().toISOString().substring(0, 10);
+
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">الفحوصات المخبرية</h2>
+                <div class="flex justify-between items-center mb-6 p-4 bg-white rounded-lg shadow-md">
+                    <span class="text-lg font-semibold text-gray-700">المسلخ: ${abattoir}</span>
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <label for="lab-date-filter" class="text-lg font-semibold text-gray-700">اختر التاريخ:</label>
+                        <input type="date" id="lab-date-filter" value="${today}" class="lab-date-picker">
+                    </div>
+                </div>
+                <div id="laboratory-report-content" class="overflow-x-auto bg-white rounded-xl shadow-lg lab-table-container">
+                    <table class="min-w-full border-collapse border border-gray-400 text-sm lab-table">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="p-2 border border-gray-400 w-16">م</th>
+                                <th class="p-2 border border-gray-400">اسم المتعامل</th>
+                                <th class="p-2 border border-gray-400">رقم التلفون</th>
+                                <th class="p-2 border border-gray-400">نوع الحيوان</th>
+                                <th class="p-2 border border-gray-400">جنس الحيوان</th>
+                                <th class="p-2 border border-gray-400">الاشتباه</th>
+                                <th class="p-2 border border-gray-400">الاختبار</th>
+                                <th class="p-2 border border-gray-400">النتيجة</th>
+                                <th class="p-2 border border-gray-400">الحكم</th>
+                                <th class="p-2 border border-gray-400 w-32">الاعتماد/حذف/تعديل</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lab-table-body">
+                            <tr id="new-lab-report-row" class="bg-yellow-50">
+                                <td class="p-1 border border-gray-400 w-16 text-center font-bold">جديد</td>
+                                <td class="p-0 border border-gray-400">
+                                    <input type="text" data-field="owner" class="table-input new-lab-input text-sm" placeholder="اسم المتعامل">
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <input type="text" data-field="phone" class="table-input new-lab-input text-sm" placeholder="رقم التلفون">
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="animalType" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labAnimalTypes.map(type => `<option value="${type}">${type}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="animalGender" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labAnimalGenders.map(gender => `<option value="${gender}">${gender}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="suspicion" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labSuspicions.map(suspicion => `<option value="${suspicion}">${suspicion}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="test" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labTests.map(test => `<option value="${test}">${test}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="result" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labResults.map(result => `<option value="${result}">${result}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-0 border border-gray-400">
+                                    <select data-field="judgment" class="table-input new-lab-input text-sm">
+                                        <option value="">-- اختر --</option>
+                                        ${state.config.labJudgments.map(judgment => `<option value="${judgment}">${judgment}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td class="p-1 border border-gray-400 text-center">
+                                    <button id="addLabReport" class="bg-emerald-500 text-white p-1 rounded text-sm hover:bg-emerald-700">إضافة</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button id="exportLabReport" class="mt-4 app-button bg-sky-600 text-white w-full">تصدير التقرير PDF</button>
+            `;
+
+            document.getElementById('exportLabReport').addEventListener('click', () => exportPdf('تقرير الفحوصات المخبرية', 'laboratory-report-content'));
+            document.getElementById('addLabReport').addEventListener('click', saveLabReport);
+            document.getElementById('lab-date-filter').addEventListener('change', updateLabReportsTable);
+            
+            updateLabReportsTable();
+        }
+
+        function updateLabReportsTable() {
+            const tableBody = document.getElementById('lab-table-body');
+            const dateFilter = document.getElementById('lab-date-filter').value;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            
+            if (!tableBody) return;
+
+            const abattoirReports = Object.values(state.reports.laboratory_reports).filter(r => r.date === dateFilter && r.abattoirId === abattoirId);
+            abattoirReports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            
+            tableBody.querySelectorAll('tr:not(#new-lab-report-row)').forEach(row => row.remove());
+            
+            abattoirReports.forEach((report, index) => {
+                const newRow = document.createElement('tr');
+                newRow.className = 'hover:bg-gray-50';
+                newRow.dataset.id = report.id;
+                
+                newRow.innerHTML = `
+                    <td class="p-1 border border-gray-400 w-16 text-center">${index + 1}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.owner || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.phone || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.animalType || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.animalGender || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.suspicion || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.test || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.result || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 flexible-cell">${report.data.judgment || 'N/A'}</td>
+                    <td class="p-1 border border-gray-400 text-center">
+                        ${report.approved ? 
+                            '<span class="bg-green-200 text-green-800 p-1 rounded text-xs">معتمد</span>' : 
+                            `<button class="approve-lab-button bg-green-500 text-white p-1 rounded text-xs mr-1" data-id="${report.id}">اعتماد</button>`
+                        }
+                        <button class="delete-lab-button bg-red-500 text-white p-1 rounded text-xs mr-1" data-id="${report.id}">حذف</button>
+                        <button class="edit-lab-button bg-blue-500 text-white p-1 rounded text-xs" data-id="${report.id}">تعديل</button>
+                    </td>
+                `;
+                tableBody.appendChild(newRow);
+            });
+            
+            if (abattoirReports.length === 0) {
+                const noDataRow = document.createElement('tr');
+                noDataRow.innerHTML = `
+                    <td colspan="10" class="p-4 border border-gray-400 text-center text-gray-500">
+                        لا توجد فحوصات مسجلة لهذا التاريخ
+                    </td>
+                `;
+                tableBody.appendChild(noDataRow);
+            }
+            
+            tableBody.addEventListener('click', handleLabActions);
+        }
+
+        function saveLabReport() {
+            const newInputs = document.querySelectorAll('.new-lab-input');
+            const reportData = {};
+            let isComplete = true;
+
+            newInputs.forEach(input => {
+                const value = input.value.trim();
+                const field = input.dataset.field;
+                reportData[field] = value;
+                if (!value && ['owner', 'phone', 'animalType', 'suspicion', 'test', 'result', 'judgment'].includes(field)) {
+                    isComplete = false;
+                }
+            });
+
+            if (!isComplete) {
+                showMessage("الرجاء ملء جميع حقول التقرير المخبري.", 'error');
+                return;
+            }
+
+            const labReportId = Date.now().toString();
+            const selectedDate = document.getElementById('lab-date-filter').value;
+            const abattoirId = state.currentAbattoir?.id || 'admin';
+            
+            state.reports.laboratory_reports[labReportId] = {
+                id: labReportId,
+                data: reportData,
+                approved: false,
+                date: selectedDate,
+                createdAt: new Date().toISOString(),
+                abattoirId: abattoirId
+            };
+
+            saveToStorage();
+            updateLabReportsTable();
+
+            newInputs.forEach(input => {
+                if (input.tagName === 'SELECT') {
+                    input.value = '';
+                } else {
+                    input.value = '';
+                }
+            });
+            showMessage('تم إضافة الفحص المخبري بنجاح.', 'success');
+        }
+
+        function handleLabActions(e) {
+            if (e.target.classList.contains('approve-lab-button')) {
+                const reportId = e.target.dataset.id;
+                if (state.reports.laboratory_reports[reportId]) {
+                    state.reports.laboratory_reports[reportId].approved = true;
+                    saveToStorage();
+                    updateLabReportsTable();
+                    showMessage('تم اعتماد الفحص المخبري بنجاح.', 'success');
+                }
+            }
+            
+            if (e.target.classList.contains('delete-lab-button')) {
+                const reportId = e.target.dataset.id;
+                if (state.reports.laboratory_reports[reportId]) {
+                    delete state.reports.laboratory_reports[reportId];
+                    saveToStorage();
+                    updateLabReportsTable();
+                    showMessage('تم حذف الفحص المخبري بنجاح.', 'success');
+                }
+            }
+            
+            if (e.target.classList.contains('edit-lab-button')) {
+                const reportId = e.target.dataset.id;
+                const report = state.reports.laboratory_reports[reportId];
+                if (report) {
+                    const row = e.target.closest('tr');
+                    row.innerHTML = `
+                        <td class="p-1 border border-gray-400 w-16 text-center">${Array.from(row.parentNode.children).indexOf(row) + 1}</td>
+                        <td class="p-0 border border-gray-400">
+                            <input type="text" value="${report.data.owner || ''}" class="table-input text-sm">
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <input type="text" value="${report.data.phone || ''}" class="table-input text-sm">
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labAnimalTypes.map(type => `<option value="${type}" ${report.data.animalType === type ? 'selected' : ''}>${type}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labAnimalGenders.map(gender => `<option value="${gender}" ${report.data.animalGender === gender ? 'selected' : ''}>${gender}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labSuspicions.map(suspicion => `<option value="${suspicion}" ${report.data.suspicion === suspicion ? 'selected' : ''}>${suspicion}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labTests.map(test => `<option value="${test}" ${report.data.test === test ? 'selected' : ''}>${test}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labResults.map(result => `<option value="${result}" ${report.data.result === result ? 'selected' : ''}>${result}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-0 border border-gray-400">
+                            <select class="table-input text-sm">
+                                <option value="">-- اختر --</option>
+                                ${state.config.labJudgments.map(judgment => `<option value="${judgment}" ${report.data.judgment === judgment ? 'selected' : ''}>${judgment}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-1 border border-gray-400 text-center">
+                            <button class="save-edit-button bg-green-500 text-white p-1 rounded text-xs mr-1" data-id="${reportId}">حفظ</button>
+                            <button class="cancel-edit-button bg-gray-500 text-white p-1 rounded text-xs" data-id="${reportId}">إلغاء</button>
+                        </td>
+                    `;
+                    
+                    row.querySelector('.save-edit-button').addEventListener('click', function() {
+                        const inputs = row.querySelectorAll('input, select');
+                        const updatedData = {};
+                        inputs.forEach((input, index) => {
+                            const field = ['owner', 'phone', 'animalType', 'animalGender', 'suspicion', 'test', 'result', 'judgment'][index];
+                            if (field) {
+                                updatedData[field] = input.value;
+                            }
+                        });
+                        
+                        state.reports.laboratory_reports[reportId].data = updatedData;
+                        saveToStorage();
+                        updateLabReportsTable();
+                        showMessage('تم تعديل الفحص المخبري بنجاح.', 'success');
+                    });
+                    
+                    row.querySelector('.cancel-edit-button').addEventListener('click', function() {
+                        updateLabReportsTable();
+                    });
+                }
+            }
+        }
+
+        // --- شاشة التقارير ---
+        function renderReportsScreen() {
+            const screen = document.getElementById('reports-screen');
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">شاشة التقارير والمخرجات</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                    <h3 class="text-xl font-semibold mb-4 text-sky-600">تصدير التقارير (PDF)</h3>
+                    <p class="mb-4 text-gray-600">للحصول على تقرير احترافي، اختر نوع التقرير من القائمة الجانبية ثم اضغط على زر "تصدير التقرير PDF".</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <button class="app-button bg-purple-500 text-white" data-action="temperature">الانتقال لدرجات الحرارة</button>
+                        <button class="app-button bg-blue-500 text-white" data-action="cleaning">الانتقال لتقييم النظافة</button>
+                        <button class="app-button bg-yellow-500 text-white" data-action="maintenance">الانتقال لتقرير الصيانة</button>
+                        <button class="app-button bg-teal-500 text-white" data-action="laboratory">الانتقال لتقرير المختبر</button>
+                    </div>
+                </div>
+            `;
+
+            screen.querySelectorAll('.app-button').forEach(button => {
+                button.addEventListener('click', () => renderScreen(button.dataset.action));
+            });
+        }
+
+        // --- شاشة الإعدادات ---
+        function renderSettingsScreen() {
+            const screen = document.getElementById('settings-screen');
+            if (!state.isAdmin) {
+                screen.innerHTML = '<p class="text-2xl text-red-600 font-bold text-center mt-20">عفواً، لا تملك صلاحية الوصول إلى هذه الشاشة.</p>';
+                return;
+            }
+
+            function renderPointsSettings(title, configKey, type) {
+                return `
+                    <div class="bg-white p-6 rounded-xl shadow-lg mb-4">
+                        <h3 class="text-xl font-semibold mb-4">${title}</h3>
+                        <div id="${type}-points-list" class="space-y-2 mb-4 max-h-40 overflow-y-auto border p-2 rounded-lg bg-gray-50">
+                            ${state.config[configKey].map(point => `
+                                <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                    <span>${point}</span>
+                                    <button data-point="${point}" data-type="${type}" class="delete-point text-red-500 hover:text-red-700">حذف</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="flex space-x-2 space-x-reverse mt-4">
+                            <input type="text" id="new-${type}-point-input" placeholder="أدخل نقطة تقييم جديدة" class="p-2 border rounded-lg flex-grow">
+                            <button id="add${type.charAt(0).toUpperCase() + type.slice(1)}Point" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            screen.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">شاشة الإعدادات (مدير النظام)</h2>
+                <div class="space-y-4">
+                    
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold mb-4">إضافة موقع المسلخ</h3>
+                        <div class="flex space-x-4 space-x-reverse mb-4">
+                            <input type="text" id="abattoir-name-input" placeholder="اسم المسلخ الجديد" class="p-3 border rounded-lg flex-grow">
+                            <input type="text" id="abattoir-code-input" placeholder="رمز المسلخ (ID)" class="p-3 border rounded-lg w-40">
+                            <button id="addAbattoir" class="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700">إضافة مسلخ</button>
+                        </div>
+                        <h4 class="text-lg font-semibold mb-2">قائمة المسالخ المعرفة:</h4>
+                        <div id="abattoir-list" class="space-y-2 border p-3 rounded-lg bg-gray-50">
+                            ${state.config.abattoirs.map(abattoir => `
+                                <div class="flex justify-between items-center p-2 border-b last:border-b-0">
+                                    <span class="font-semibold">${abattoir.name} (<span class="text-blue-600">${abattoir.id}</span>)</span>
+                                    <button data-id="${abattoir.id}" class="delete-abattoir text-red-500 hover:text-red-700">حذف</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold mb-4">إعداد صور الواجهة</h3>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="font-semibold mb-2">صورة شاشة الترحيب (Splash)</h4>
+                                <input type="file" id="splash-file-input" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">صورة الشريط الجانبي (Unified)</h4>
+                                <input type="file" id="unified-file-input" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+                            </div>
+                        </div>
+                    </div>
+
+                    ${renderPointsSettings('نقاط قياس درجات الحرارة', 'tempPoints', 'temp')}
+                    ${renderPointsSettings('نقاط تقييم النظافة', 'cleaningPoints', 'cleaning')}
+                    ${renderPointsSettings('نقاط تقييم الصيانة', 'maintenancePoints', 'maintenance')}
+
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold mb-4">إعدادات الفحوصات المخبرية</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <h4 class="font-semibold mb-2">أنواع الحيوانات</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labAnimalTypes.map(type => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${type}</span>
+                                            <button data-type="labAnimalTypes" data-value="${type}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-animal-type-input" placeholder="نوع جديد" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addAnimalType" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">جنس الحيوان</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labAnimalGenders.map(gender => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${gender}</span>
+                                            <button data-type="labAnimalGenders" data-value="${gender}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-animal-gender-input" placeholder="جنس جديد" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addAnimalGender" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">حالات الاشتباه</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labSuspicions.map(suspicion => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${suspicion}</span>
+                                            <button data-type="labSuspicions" data-value="${suspicion}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-suspicion-input" placeholder="اشتباه جديد" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addSuspicion" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">الاختبارات</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labTests.map(test => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${test}</span>
+                                            <button data-type="labTests" data-value="${test}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-test-input" placeholder="اختبار جديد" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addTest" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">النتائج</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labResults.map(result => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${result}</span>
+                                            <button data-type="labResults" data-value="${result}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-result-input" placeholder="نتيجة جديدة" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addResult" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold mb-2">الأحكام</h4>
+                                <div class="space-y-2 border p-2 rounded-lg bg-gray-50 max-h-40 overflow-y-auto">
+                                    ${state.config.labJudgments.map(judgment => `
+                                        <div class="flex justify-between items-center p-1 border-b last:border-b-0">
+                                            <span>${judgment}</span>
+                                            <button data-type="labJudgments" data-value="${judgment}" class="delete-lab-item text-red-500 hover:text-red-700">حذف</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex space-x-2 space-x-reverse mt-2">
+                                    <input type="text" id="new-judgment-input" placeholder="حكم جديد" class="p-2 border rounded-lg flex-grow">
+                                    <button id="addJudgment" class="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">إضافة</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('addAbattoir').addEventListener('click', addAbattoirHandler);
+            screen.querySelectorAll('.delete-abattoir').forEach(btn => btn.addEventListener('click', deleteAbattoirHandler));
+
+            document.getElementById('splash-file-input').addEventListener('change', (e) => handleImageUpload(e, 'splashImageUrl', dom.splashImageDisplay) );
+            document.getElementById('unified-file-input').addEventListener('change', (e) => handleImageUpload(e, 'unifiedImageUrl', dom.sidebarImageDisplay) );
+
+            document.getElementById('addTempPoint').addEventListener('click', () => addPointHandler('temp'));
+            document.getElementById('addCleaningPoint').addEventListener('click', () => addPointHandler('cleaning'));
+            document.getElementById('addMaintenancePoint').addEventListener('click', () => addPointHandler('maintenance'));
+            screen.querySelectorAll('.delete-point').forEach(btn => btn.addEventListener('click', deletePointHandler));
+
+            document.getElementById('addAnimalType').addEventListener('click', () => addLabItemHandler('labAnimalTypes', 'new-animal-type-input'));
+            document.getElementById('addAnimalGender').addEventListener('click', () => addLabItemHandler('labAnimalGenders', 'new-animal-gender-input'));
+            document.getElementById('addSuspicion').addEventListener('click', () => addLabItemHandler('labSuspicions', 'new-suspicion-input'));
+            document.getElementById('addTest').addEventListener('click', () => addLabItemHandler('labTests', 'new-test-input'));
+            document.getElementById('addResult').addEventListener('click', () => addLabItemHandler('labResults', 'new-result-input'));
+            document.getElementById('addJudgment').addEventListener('click', () => addLabItemHandler('labJudgments', 'new-judgment-input'));
+            screen.querySelectorAll('.delete-lab-item').forEach(btn => btn.addEventListener('click', deleteLabItemHandler));
+        }
+        
+        function addAbattoirHandler() {
+            const nameInput = document.getElementById('abattoir-name-input');
+            const codeInput = document.getElementById('abattoir-code-input');
+            const name = nameInput.value.trim();
+            const id = codeInput.value.trim();
+
+            if (!name || !id) {
+                showMessage('الرجاء إدخال اسم ورمز المسلخ.', 'error');
+                return;
+            }
+            if (state.config.abattoirs.find(a => a.id === id)) {
+                showMessage('رمز المسلخ موجود مسبقاً.', 'error');
+                return;
+            }
+
+            state.config.abattoirs.push({ id, name });
+            saveToStorage();
+            showMessage(`تم إضافة المسلخ ${name} بنجاح.`, 'success');
+            nameInput.value = '';
+            codeInput.value = '';
+            renderSettingsScreen();
+        }
+
+        function deleteAbattoirHandler(e) {
+            const idToDelete = e.target.dataset.id;
+            
+            state.config.abattoirs = state.config.abattoirs.filter(a => a.id !== idToDelete);
+            saveToStorage();
+            showMessage('تم حذف المسلخ بنجاح.', 'success');
+            renderSettingsScreen();
+        }
+
+        function addPointHandler(type) {
+            const inputId = `new-${type}-point-input`;
+            const input = document.getElementById(inputId);
+            const point = input.value.trim();
+            const configKey = `${type}Points`;
+
+            if (!point) {
+                showMessage('الرجاء إدخال اسم نقطة التقييم.', 'error');
+                return;
+            }
+
+            if (state.config[configKey].includes(point)) {
+                showMessage('نقطة التقييم هذه موجودة مسبقاً.', 'error');
+                return;
+            }
+
+            state.config[configKey].push(point);
+            saveToStorage();
+            showMessage('تم إضافة النقطة بنجاح.', 'success');
+            input.value = '';
+            renderSettingsScreen(); 
+        }
+
+        function deletePointHandler(e) {
+            const pointToDelete = e.target.dataset.point;
+            const type = e.target.dataset.type;
+            const configKey = `${type}Points`;
+
+            state.config[configKey] = state.config[configKey].filter(p => p !== pointToDelete);
+            saveToStorage();
+            showMessage('تم حذف البند بنجاح.');
+            renderSettingsScreen(); 
+        }
+
+        function addLabItemHandler(configKey, inputId) {
+            const input = document.getElementById(inputId);
+            const value = input.value.trim();
+
+            if (!value) {
+                showMessage('الرجاء إدخال قيمة.', 'error');
+                return;
+            }
+
+            if (state.config[configKey].includes(value)) {
+                showMessage('هذه القيمة موجودة مسبقاً.', 'error');
+                return;
+            }
+
+            state.config[configKey].push(value);
+            saveToStorage();
+            showMessage('تم إضافة القيمة بنجاح.', 'success');
+            input.value = '';
+            renderSettingsScreen();
+        }
+
+        function deleteLabItemHandler(e) {
+            const valueToDelete = e.target.dataset.value;
+            const configKey = e.target.dataset.type;
+
+            state.config[configKey] = state.config[configKey].filter(v => v !== valueToDelete);
+            saveToStorage();
+            showMessage('تم حذف القيمة بنجاح.');
+            renderSettingsScreen();
+        }
+
+        // =========================================================
+        // 8. المشغلات (Events)
+        // =========================================================
+
+        window.onload = setupAppAndLoad;
+
+        // منع إعادة تحميل الصفحة عند الضغط على F5
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                // إعادة تحميل الشاشة الحالية فقط
+                if (state.currentScreen) {
+                    renderScreen(state.currentScreen);
+                }
+            }
+        });
+
+        // منع إعادة تحميل الصفحة عند تحديث المتصفح
+        window.addEventListener('beforeunload', function(e) {
+            // لا تفعل شيئاً - هذا يمنع المتصفح من إظهار رسالة تأكيد
+        });
+
+        dom.loginButton.addEventListener('click', () => {
+            handleLogin(dom.abattoirCodeInput.value.trim());
+        });
+        
+        dom.abattoirCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleLogin(dom.abattoirCodeInput.value.trim());
+            }
+        });
+
+        dom.logoutButton.addEventListener('click', handleLogout);
+
+        document.querySelectorAll('.menu-item').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const screenName = e.target.dataset.screen;
+                if (screenName === 'settings' && !state.isAdmin) {
+                    showMessage('لا تملك صلاحية الوصول للإعدادات.', 'error');
+                    return;
+                }
+                renderScreen(screenName);
+            });
+        });
+
+        dom.backButton.addEventListener('click', () => renderScreen('dashboard'));
+
+    </script>
+</body>
+</html>
