@@ -672,7 +672,7 @@
         </div>
 
         <footer id="app-footer">
-            <p>&copy; 2025 نظام التقارير اليومية للمسالخ. جميع الحقوق محفوظة.</p>
+            <p>&copy;  2025 نظام التقارير اليومية للمسالخ. جميع الحقوق محفوظة.</p>
         </footer>
 
     </div>
@@ -691,7 +691,7 @@
                 splashImageUrl: DEFAULT_BASE64_IMAGE,
                 unifiedImageUrl: DEFAULT_BASE64_ICON,
                 abattoirs: [
-                    { id: '12345', name: 'مسلخ غياثي' }
+                    { id: '12345', name: 'مسلخ A' }
                 ],
                 adminCode: '70062',
                 tempPoints: [
@@ -832,7 +832,7 @@
                 updateHeaderAbattoirInfo();
                 
                 renderScreen('dashboard');
-                showMessage('تم تسجيل الدخول كمدير نظام.', 'success');
+                showMessage('تم تسجيل الدخول بنجاح.', 'success');
             } else {
                 const abattoir = state.config.abattoirs.find(a => a.id === abattoirCode);
                 if (abattoir) {
@@ -1404,16 +1404,16 @@
         
         function renderDashboard() {
             const screen = document.getElementById('dashboard-screen');
-            const abattoirName = state.isAdmin ? 'مدير النظام' : (state.currentAbattoir?.name || 'مسلخ');
+            const abattoirName = state.isAdmin ? ' ' : (state.currentAbattoir?.name || 'مسلخ');
             
             screen.innerHTML = `
                 <h2 class="text-3xl font-bold text-gray-800 mb-6">لوحة التحكم</h2>
                 <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
-                    <h3 class="text-xl font-semibold mb-4 text-emerald-600">مرحباً بك في ${abattoirName}</h3>
-                    <p class="text-gray-600 mb-4">يمكنك استخدام القائمة الجانبية للوصول إلى مختلف أقسام النظام.</p>
+                    <h3 class="text-xl font-semibold mb-4 text-emerald-600"> ${abattoirName}</h3>
+                    <p class="text-gray-600 mb-4"></p>
                     ${state.isAdmin ? 
-                        '<p class="text-blue-600 font-semibold">أنت مسجل الدخول كمدير نظام. يمكنك الوصول إلى جميع الإعدادات.</p>' : 
-                        '<p class="text-green-600">يمكنك إدخال التقارير اليومية للمسلخ الخاص بك.</p>'
+                        '<p class="text-blue-600 font-semibold"></p>' : 
+                        '<p class="text-green-600"></p>'
                     }
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
